@@ -58,22 +58,23 @@
 
   <script src="https://cdn.jsdelivr.net/npm/swiper@9/swiper-bundle.min.js"></script>
   <script>
-    const url = "promo.pdf"; // PDF 文件路径
+    const url = "promo.pdf";
     const coverDiv = document.getElementById("cover");
     const swiperDiv = document.getElementById("swiper");
     const viewer = document.getElementById("pdf-viewer");
     let pdfDoc = null;
     let swiper = null;
+    const renderedPages = new Set();
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js";
 
     // 渲染单页
     function renderPage(pageNum, container, scale = 2) {
+      if (renderedPages.has(pageNum)) return; // 避免重复渲染
       return pdfDoc.getPage(pageNum).then(page => {
         const viewport = page.getViewport({ scale });
         const canvas = document.createElement("canvas");
         const context = canvas.getContext("2d");
-
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         canvas.style.width = "100%";
@@ -81,10 +82,11 @@
 
         page.render({ canvasContext: context, viewport: viewport });
         container.appendChild(canvas);
+        renderedPages.add(pageNum);
       });
     }
 
-    // 渲染封面
+    // 显示封面（第一页）
     function showCover() {
       coverDiv.innerHTML = "";
       swiperDiv.style.display = "none";
@@ -92,31 +94,38 @@
       renderPage(1, coverDiv, 2);
     }
 
-    // 渲染全部页面 + Swiper
+    // 横屏全屏 + 懒加载
     function showFullScreen() {
       coverDiv.style.display = "none";
       swiperDiv.style.display = "block";
       viewer.innerHTML = "";
 
-      let tasks = [];
       for (let i = 1; i <= pdfDoc.numPages; i++) {
         const slide = document.createElement("div");
         slide.className = "swiper-slide";
+        slide.dataset.pageNum = i;
         viewer.appendChild(slide);
-        tasks.push(renderPage(i, slide, 2));
       }
 
-      Promise.all(tasks).then(() => {
-        if (swiper) swiper.destroy(); // 避免重复初始化
-        swiper = new Swiper('.swiper', {
-          direction: 'horizontal',
-          loop: false,
-          pagination: { el: '.swiper-pagination' },
-        });
+      if (swiper) swiper.destroy();
+      swiper = new Swiper('.swiper', {
+        direction: 'horizontal',
+        loop: false,
+        pagination: { el: '.swiper-pagination' },
+        on: {
+          slideChange: () => {
+            const pageNum = swiper.activeIndex + 1;
+            const slide = viewer.children[pageNum - 1];
+            renderPage(pageNum, slide, 2);
+          }
+        }
       });
+
+      // 立即加载第一页
+      renderPage(1, viewer.children[0], 2);
     }
 
-    // 检测横竖屏
+    // 横竖屏切换
     function handleOrientation() {
       if (window.matchMedia("(orientation: landscape)").matches) {
         showFullScreen();
@@ -131,7 +140,6 @@
       handleOrientation();
     });
 
-    // 监听横竖屏切换
     window.addEventListener("orientationchange", () => {
       setTimeout(handleOrientation, 300);
     });
