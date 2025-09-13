@@ -25,10 +25,9 @@
       background: #000;
     }
     canvas {
-      width: 100%;
-      height: 100%;
-      object-fit: contain; /* 保持比例，完整显示 */
       background: #fff;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
   </style>
 </head>
@@ -40,34 +39,43 @@
 
   <script src="https://cdn.jsdelivr.net/npm/swiper@9/swiper-bundle.min.js"></script>
   <script>
-    const url = "ttpdf.pdf"; // 你的 PDF 文件
+    const url = "promo.pdf"; // PDF 文件路径
     const viewer = document.getElementById('pdf-viewer');
+    let pdfPages = []; // 存放页面渲染的 Promise
 
-    pdfjsLib.getDocument(url).promise.then(pdf => {
-      for (let i = 1; i <= pdf.numPages; i++) {
-        pdf.getPage(i).then(page => {
-          const viewport = page.getViewport({ scale: 1 });
-          const container = document.createElement("div");
-          container.className = "swiper-slide";
+    function renderPDF() {
+      return pdfjsLib.getDocument(url).promise.then(pdf => {
+        for (let i = 1; i <= pdf.numPages; i++) {
+          let promise = pdf.getPage(i).then(page => {
+            const viewport = page.getViewport({ scale: 1 });
+            const container = document.createElement("div");
+            container.className = "swiper-slide";
 
-          const canvas = document.createElement("canvas");
-          const context = canvas.getContext("2d");
+            const canvas = document.createElement("canvas");
+            const context = canvas.getContext("2d");
 
-          // 按屏幕宽度缩放
-          const screenWidth = window.innerWidth;
-          const scale = screenWidth / viewport.width;
-          const scaledViewport = page.getViewport({ scale });
+            // 高清渲染：根据设备像素比缩放
+            const dpr = window.devicePixelRatio || 1;
+            const screenWidth = window.innerWidth;
+            const scale = (screenWidth / viewport.width) * dpr;
+            const scaledViewport = page.getViewport({ scale });
 
-          canvas.width = scaledViewport.width;
-          canvas.height = scaledViewport.height;
+            canvas.width = scaledViewport.width;
+            canvas.height = scaledViewport.height;
+            canvas.style.width = (scaledViewport.width / dpr) + "px";
+            canvas.style.height = (scaledViewport.height / dpr) + "px";
 
-          page.render({ canvasContext: context, viewport: scaledViewport });
-          container.appendChild(canvas);
-          viewer.appendChild(container);
-        });
-      }
-    }).then(() => {
-      // 初始化 Swiper
+            page.render({ canvasContext: context, viewport: scaledViewport });
+            container.appendChild(canvas);
+            viewer.appendChild(container);
+          });
+          pdfPages.push(promise);
+        }
+        return Promise.all(pdfPages);
+      });
+    }
+
+    function initSwiper() {
       new Swiper('.swiper', {
         direction: 'horizontal',
         loop: false,
@@ -75,6 +83,32 @@
           el: '.swiper-pagination',
         },
       });
+    }
+
+    function handleOrientation() {
+      if (window.matchMedia("(orientation: landscape)").matches) {
+        document.querySelectorAll("canvas").forEach(c => {
+          c.style.width = "100vw";
+          c.style.height = "100vh";
+          c.style.objectFit = "contain";
+        });
+      } else {
+        document.querySelectorAll("canvas").forEach(c => {
+          c.style.width = "";
+          c.style.height = "";
+        });
+      }
+    }
+
+    // 初始化
+    renderPDF().then(() => {
+      initSwiper();
+      handleOrientation();
+    });
+
+    // 横竖屏切换监听
+    window.addEventListener("orientationchange", () => {
+      setTimeout(handleOrientation, 300);
     });
   </script>
 </body>
