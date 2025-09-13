@@ -4,7 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>集团宣传册</title>
+  <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js"></script>
+  <!-- Swiper -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@9/swiper-bundle.min.css"/>
   <style>
     html, body {
@@ -26,13 +29,29 @@
     }
     canvas {
       background: #fff;
-      border-radius: 6px;
+      max-width: 100%;
+      max-height: 100%;
+    }
+    #cover {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+      background: #000;
+    }
+    #cover canvas {
+      width: 100%;
+      height: auto;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
   </style>
 </head>
 <body>
-  <div class="swiper">
+  <!-- 封面容器 -->
+  <div id="cover"></div>
+
+  <!-- 全屏播放容器 -->
+  <div class="swiper" id="swiper" style="display:none;">
     <div class="swiper-wrapper" id="pdf-viewer"></div>
     <div class="swiper-pagination"></div>
   </div>
@@ -40,73 +59,79 @@
   <script src="https://cdn.jsdelivr.net/npm/swiper@9/swiper-bundle.min.js"></script>
   <script>
     const url = "promo.pdf"; // PDF 文件路径
-    const viewer = document.getElementById('pdf-viewer');
-    let pdfPages = []; // 存放页面渲染的 Promise
+    const coverDiv = document.getElementById("cover");
+    const swiperDiv = document.getElementById("swiper");
+    const viewer = document.getElementById("pdf-viewer");
+    let pdfDoc = null;
+    let swiper = null;
 
-    function renderPDF() {
-      return pdfjsLib.getDocument(url).promise.then(pdf => {
-        for (let i = 1; i <= pdf.numPages; i++) {
-          let promise = pdf.getPage(i).then(page => {
-            const viewport = page.getViewport({ scale: 1 });
-            const container = document.createElement("div");
-            container.className = "swiper-slide";
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js";
 
-            const canvas = document.createElement("canvas");
-            const context = canvas.getContext("2d");
+    // 渲染单页
+    function renderPage(pageNum, container, scale = 2) {
+      return pdfDoc.getPage(pageNum).then(page => {
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
 
-            // 高清渲染：根据设备像素比缩放
-            const dpr = window.devicePixelRatio || 1;
-            const screenWidth = window.innerWidth;
-            const scale = (screenWidth / viewport.width) * dpr;
-            const scaledViewport = page.getViewport({ scale });
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        canvas.style.width = "100%";
+        canvas.style.height = "auto";
 
-            canvas.width = scaledViewport.width;
-            canvas.height = scaledViewport.height;
-            canvas.style.width = (scaledViewport.width / dpr) + "px";
-            canvas.style.height = (scaledViewport.height / dpr) + "px";
-
-            page.render({ canvasContext: context, viewport: scaledViewport });
-            container.appendChild(canvas);
-            viewer.appendChild(container);
-          });
-          pdfPages.push(promise);
-        }
-        return Promise.all(pdfPages);
+        page.render({ canvasContext: context, viewport: viewport });
+        container.appendChild(canvas);
       });
     }
 
-    function initSwiper() {
-      new Swiper('.swiper', {
-        direction: 'horizontal',
-        loop: false,
-        pagination: {
-          el: '.swiper-pagination',
-        },
+    // 渲染封面
+    function showCover() {
+      coverDiv.innerHTML = "";
+      swiperDiv.style.display = "none";
+      coverDiv.style.display = "flex";
+      renderPage(1, coverDiv, 2);
+    }
+
+    // 渲染全部页面 + Swiper
+    function showFullScreen() {
+      coverDiv.style.display = "none";
+      swiperDiv.style.display = "block";
+      viewer.innerHTML = "";
+
+      let tasks = [];
+      for (let i = 1; i <= pdfDoc.numPages; i++) {
+        const slide = document.createElement("div");
+        slide.className = "swiper-slide";
+        viewer.appendChild(slide);
+        tasks.push(renderPage(i, slide, 2));
+      }
+
+      Promise.all(tasks).then(() => {
+        if (swiper) swiper.destroy(); // 避免重复初始化
+        swiper = new Swiper('.swiper', {
+          direction: 'horizontal',
+          loop: false,
+          pagination: { el: '.swiper-pagination' },
+        });
       });
     }
 
+    // 检测横竖屏
     function handleOrientation() {
       if (window.matchMedia("(orientation: landscape)").matches) {
-        document.querySelectorAll("canvas").forEach(c => {
-          c.style.width = "100vw";
-          c.style.height = "100vh";
-          c.style.objectFit = "contain";
-        });
+        showFullScreen();
       } else {
-        document.querySelectorAll("canvas").forEach(c => {
-          c.style.width = "";
-          c.style.height = "";
-        });
+        showCover();
       }
     }
 
-    // 初始化
-    renderPDF().then(() => {
-      initSwiper();
+    // 初始化 PDF
+    pdfjsLib.getDocument(url).promise.then(pdf => {
+      pdfDoc = pdf;
       handleOrientation();
     });
 
-    // 横竖屏切换监听
+    // 监听横竖屏切换
     window.addEventListener("orientationchange", () => {
       setTimeout(handleOrientation, 300);
     });
