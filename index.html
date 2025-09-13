@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>集团宣传册</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@9/swiper-bundle.min.css"/>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+    .swiper {
+      width: 100%;
+      height: 100%;
+    }
+    .swiper-slide {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #000;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: contain; /* 保持比例，完整显示 */
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="swiper">
+    <div class="swiper-wrapper" id="pdf-viewer"></div>
+    <div class="swiper-pagination"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/swiper@9/swiper-bundle.min.js"></script>
+  <script>
+    const url = "ttpdf.pdf"; // 你的 PDF 文件
+    const viewer = document.getElementById('pdf-viewer');
+
+    pdfjsLib.getDocument(url).promise.then(pdf => {
+      for (let i = 1; i <= pdf.numPages; i++) {
+        pdf.getPage(i).then(page => {
+          const viewport = page.getViewport({ scale: 1 });
+          const container = document.createElement("div");
+          container.className = "swiper-slide";
+
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+
+          // 按屏幕宽度缩放
+          const screenWidth = window.innerWidth;
+          const scale = screenWidth / viewport.width;
+          const scaledViewport = page.getViewport({ scale });
+
+          canvas.width = scaledViewport.width;
+          canvas.height = scaledViewport.height;
+
+          page.render({ canvasContext: context, viewport: scaledViewport });
+          container.appendChild(canvas);
+          viewer.appendChild(container);
+        });
+      }
+    }).then(() => {
+      // 初始化 Swiper
+      new Swiper('.swiper', {
+        direction: 'horizontal',
+        loop: false,
+        pagination: {
+          el: '.swiper-pagination',
+        },
+      });
+    });
+  </script>
+</body>
+</html>
