@@ -58,19 +58,25 @@
 
   <script src="https://cdn.jsdelivr.net/npm/swiper@9/swiper-bundle.min.js"></script>
   <script>
-    const url = "ttpdf.pdf";
+    const url = "ttpdf.pdf"; // PDF 文件路径
     const coverDiv = document.getElementById("cover");
     const swiperDiv = document.getElementById("swiper");
     const viewer = document.getElementById("pdf-viewer");
     let pdfDoc = null;
     let swiper = null;
     const renderedPages = new Set();
+    let firstPageCanvas = null; // 缓存第一页
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js";
 
     // 渲染单页
     function renderPage(pageNum, container, scale = 2) {
-      if (renderedPages.has(pageNum)) return; // 避免重复渲染
+      if (pageNum === 1 && firstPageCanvas) {
+        container.appendChild(firstPageCanvas);
+        return Promise.resolve();
+      }
+      if (renderedPages.has(pageNum)) return Promise.resolve();
+
       return pdfDoc.getPage(pageNum).then(page => {
         const viewport = page.getViewport({ scale });
         const canvas = document.createElement("canvas");
@@ -82,29 +88,36 @@
 
         page.render({ canvasContext: context, viewport: viewport });
         container.appendChild(canvas);
+
+        if (pageNum === 1) firstPageCanvas = canvas; // 缓存第一页
         renderedPages.add(pageNum);
       });
     }
 
-    // 显示封面（第一页）
+    // 显示封面
     function showCover() {
       coverDiv.innerHTML = "";
       swiperDiv.style.display = "none";
       coverDiv.style.display = "flex";
-      renderPage(1, coverDiv, 2);
+      if (firstPageCanvas) {
+        coverDiv.appendChild(firstPageCanvas);
+      } else {
+        renderPage(1, coverDiv, 2);
+      }
     }
 
     // 横屏全屏 + 懒加载
     function showFullScreen() {
       coverDiv.style.display = "none";
       swiperDiv.style.display = "block";
-      viewer.innerHTML = "";
 
-      for (let i = 1; i <= pdfDoc.numPages; i++) {
-        const slide = document.createElement("div");
-        slide.className = "swiper-slide";
-        slide.dataset.pageNum = i;
-        viewer.appendChild(slide);
+      if (!viewer.hasChildNodes()) {
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+          const slide = document.createElement("div");
+          slide.className = "swiper-slide";
+          slide.dataset.pageNum = i;
+          viewer.appendChild(slide);
+        }
       }
 
       if (swiper) swiper.destroy();
@@ -121,11 +134,12 @@
         }
       });
 
-      // 立即加载第一页
-      renderPage(1, viewer.children[0], 2);
+      // 渲染第一页
+      const firstSlide = viewer.children[0];
+      renderPage(1, firstSlide, 2);
     }
 
-    // 横竖屏切换
+    // 检测横竖屏
     function handleOrientation() {
       if (window.matchMedia("(orientation: landscape)").matches) {
         showFullScreen();
@@ -146,4 +160,3 @@
   </script>
 </body>
 </html>
-
